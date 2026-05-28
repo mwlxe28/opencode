@@ -1,21 +1,15 @@
-name: Build static musl for opencode
+name: Build Linux musl static only
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - dev
-      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: alpine:3.18
+    container: alpine:latest
     steps:
       - name: Install dependencies
-        run: |
-          apk update
-          apk add --no-cache git bash curl gcc g++ musl-dev make
+        run: apk add --no-cache git curl bash gcc g++ musl-dev make
 
       - uses: actions/checkout@v4
 
@@ -27,15 +21,17 @@ jobs:
       - name: Install deps
         run: bun install
 
-      - name: Build static musl
+      - name: Build ONLY Linux musl static
         run: |
-          BUN_LINK_TYPE=static CC=musl-gcc bun run packages/opencode/script/build.ts
+          BUN_LINK_TYPE=static \
+          CC=musl-gcc \
+          bun run packages/opencode/script/build.ts
 
-      - name: Show dist
-        run: ls -la dist/
+      - name: Show files
+        run: ls -lh dist/
 
-      - name: Upload binaries
-        uses: actions/upload-artifact@v4
+      - name: Upload Linux musl static
+        uses: upload-artifact@v4
         with:
-          name: opencode-musl-static
+          name: opencode-linux-musl-static
           path: dist/

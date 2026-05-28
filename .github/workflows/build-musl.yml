@@ -1,4 +1,4 @@
-name: Build Linux musl static only
+name: Build Linux musl static
 
 on:
   workflow_dispatch:
@@ -6,14 +6,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: centos:7
+    container: alpine:latest
     steps:
       - name: Install dependencies
-        run: |
-          yum update -y
-          yum groupinstall -y "Development Tools"
-          yum install -y git curl bash make
-          yum install -y musl musl-devel musl-static
+        run: apk add --no-cache git curl bash gcc g++ musl-dev make
 
       - uses: actions/checkout@v4
 
@@ -25,17 +21,17 @@ jobs:
       - name: Install deps
         run: bun install
 
-      - name: Build ONLY Linux musl static
+      - name: Build Linux musl static
         run: |
           BUN_LINK_TYPE=static \
           CC=musl-gcc \
           bun run packages/opencode/script/build.ts
 
-      - name: Show files
+      - name: List dist
         run: ls -lh dist/
 
-      - name: Upload Linux musl static
-        uses: upload-artifact@v4
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: opencode-linux-musl-static
           path: dist/

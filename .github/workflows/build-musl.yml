@@ -1,0 +1,41 @@
+name: Build static musl for opencode
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: alpine:3.18
+    steps:
+      - name: Install dependencies
+        run: |
+          apk update
+          apk add --no-cache git bash curl gcc g++ musl-dev make
+
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash -s -- --platform linux-x64-musl
+          echo "$HOME/.bun/bin" >> $GITHUB_PATH
+
+      - name: Install deps
+        run: bun install
+
+      - name: Build static musl
+        run: |
+          BUN_LINK_TYPE=static CC=musl-gcc bun run packages/opencode/script/build.ts
+
+      - name: Show dist
+        run: ls -la dist/
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-musl-static
+          path: dist/

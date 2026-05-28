@@ -1,7 +1,12 @@
-name: Build Linux musl static
+name: Build Linux musl static only
 
 on:
   workflow_dispatch:
+
+# 关键：同分支只留最新一个，旧的自动取消
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -11,9 +16,10 @@ jobs:
       - name: Install dependencies
         run: apk add --no-cache git curl bash gcc g++ musl-dev make
 
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Bun
+      - name: Install Bun (linux-x64-musl)
         run: |
           curl -fsSL https://bun.sh/install | bash -s -- --platform linux-x64-musl
           echo "$HOME/.bun/bin" >> $GITHUB_PATH
@@ -21,7 +27,7 @@ jobs:
       - name: Install deps
         run: bun install
 
-      - name: Build Linux musl static
+      - name: Build static musl
         run: |
           BUN_LINK_TYPE=static \
           CC=musl-gcc \

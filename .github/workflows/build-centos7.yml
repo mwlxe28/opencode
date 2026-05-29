@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build in CentOS7 container
+      - name: Build in CentOS7 container with compatibility focus
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace centos:7 bash -c '
             set -e
@@ -21,20 +21,30 @@ jobs:
             sed -i "s|mirrorlist=|#mirrorlist=|g" /etc/yum.repos.d/CentOS-Base.repo
             sed -i "s|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g" /etc/yum.repos.d/CentOS-Base.repo
             
-            echo "=== Installing build dependencies ==="
-            yum install -y git curl tar gzip zip unzip gcc gcc-c++ make python3 python3-devel
-            yum install -y glibc-static libstdc++-static
+            echo "=== Installing build dependencies with glibc 2.17 compatibility ==="
+            yum install -y git curl tar gzip zip unzip gcc gcc-c++ make
             
-            echo "=== Downloading Bun (baseline for CentOS7) ==="
-            curl -L https://github.com/oven-sh/bun/releases/latest/download/bun-linux-x64-baseline.zip -o bun.zip
-            unzip bun.zip
+            echo "=== Installing Python 3.9 for node-gyp compatibility ==="
+            yum install -y centos-release-scl
+            yum install -y rh-python39-python rh-python39-python-devel
+            
+            echo "Activating Python 3.9..."
+            source /opt/rh/rh-python39/enable
+            python3 --version
+            
+            echo "=== Installing static libraries ==="
+            yum install -y glibc-static libstdc++-static zlib-static
+            
+            echo "=== Downloading Bun baseline (CentOS7 compatible) ==="
+            curl -L https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-baseline.zip -o bun.zip
+            unzip -q bun.zip
             mv bun-linux-x64-baseline/bun /usr/local/bin/bun
             chmod +x /usr/local/bin/bun
             echo "Bun version:"
             /usr/local/bin/bun --version
             
-            echo "=== Installing project dependencies ==="
-            /usr/local/bin/bun install
+            echo "=== Building with prebuilt modules ==="
+            /usr/local/bin/bun install --no-optional || /usr/local/bin/bun install
             
             echo "=== Building statically for CentOS7 ==="
             /usr/local/bin/bun build ./packages/opencode/src/cli.ts \
@@ -43,31 +53,21 @@ jobs:
               --target=linux-x64 \
               --outfile opencode-centos7-static
             
-            echo "=== Verifying static linking ==="
+            echo "=== Binary Information ==="
             file opencode-centos7-static
-            echo "=== Binary Info ==="
             ls -lh opencode-centos7-static
-            echo "=== Checking dependencies ==="
-            ldd opencode-centos7-static || echo "Binary is statically linked (no ldd output)"
+            
+            echo "=== Checking for runtime dependencies ==="
+            ldd opencode-centos7-static 2>&1 | head -20 || echo "Binary linking check complete"
           '
 
-      - name: Verify binary is fully static
+      - name: Verify binary compatibility  
         run: |
+          echo "=== File Type ==="
           file opencode-centos7-static
-          # Try to run ldd - should show "not a dynamic executable" for static binaries
-          output=$(ldd opencode-centos7-static 2>&1 || true)
-          if echo "$output" | grep -q "not a dynamic executable"; then
-            echo "✓ Binary is fully statically linked"
-          elif echo "$output" | grep -q "statically linked"; then
-            echo "✓ Binary is fully statically linked"
-          else
-            echo "ℹ Binary check output: $output"
-          fi
           
+          echo "=== Size ==="
           ls -lh opencode-centos7-static
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: opencode-centos7-static
-          path: opencode-centos7-static
+          
+          echo "=== Dependencies](#)
+

@@ -12,15 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build in CentOS7 container (FULL FIX)
+      - name: Build in CentOS7 container
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace centos:7 bash -c '
-            set -e -x
+            set -e
+            cd /workspace
 
-            echo "====================================="
-            echo " Fix all CentOS 7 YUM repos (Aliyun)"
-            echo "====================================="
-            cat > /etc/yum.repos.d/CentOS-Base.repo <<EOF
+            # 1. 替换 yum 源
+            cat > /etc/yum.repos.d/CentOS-Base.repo <<"EOF"
             [base]
             name=CentOS-7 - Base
             baseurl=https://mirrors.aliyun.com/centos/7.9.2009/os/x86_64/
@@ -41,53 +40,59 @@ jobs:
             yum clean all
             yum makecache fast
 
-            echo "====================================="
-            echo " Install build tools"
-            echo "====================================="
-            yum install -y git curl tar gzip zip unzip gcc gcc-c++ make glibc-static libstdc++-static zlib-static
+            # 2. 安装基础工具
+            yum install -y git curl tar unzip gcc gcc-c++ make glibc-static libstdc++-static zlib-static
 
-            echo "====================================="
-            echo " Install Python 3.9 (SCL)"
-            echo "====================================="
-            yum install -y centos-release-scl
-            sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-SCLo-*.repo
-            sed -i 's|http://mirror.centos.org|https://mirrors.aliyun.com|g' /etc/yum.repos.d/CentOS-SCLo-*.repo
+            # 3. 安装 SCL 源
+            yum install -y centos-release-scl centos-release-scl-rh
+
+            # 4. 替换 SCL 源（阿里云，无 sed！）
+            cat > /etc/yum.repos.d/CentOS-SCLo-scl.repo <<"EOF"
+            [centos-sclo-sclo]
+            name=CentOS-7 - SCLo sclo
+            baseurl=https://mirrors.aliyun.com/centos/7/sclo/x86_64/sclo/
+            gpgcheck=0
+            enabled=1
+            EOF
+
+            cat > /etc/yum.repos.d/CentOS-SCLo-scl-rh.repo <<"EOF"
+            [centos-sclo-rh]
+            name=CentOS-7 - SCLo rh
+            baseurl=https://mirrors.aliyun.com/centos/7/sclo/x86_64/rh/
+            gpgcheck=0
+            enabled=1
+            EOF
+
             yum clean all
             yum makecache fast
+
+            # 5. 安装 Python3.9
             yum install -y rh-python39
             source /opt/rh/rh-python39/enable
             python3 --version
 
-            echo "====================================="
-            echo " Install Bun"
-            echo "====================================="
+            # 6. 安装 Bun
             curl -L https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-baseline.zip -o bun.zip
             unzip -o bun.zip
-            mv bun-linux-x64-baseline/bun /usr/local/bin/
+            mv bun-linux-x64-baseline/bun /usr/local/bin/bun
             chmod +x /usr/local/bin/bun
-            bun --version
 
-            echo "====================================="
-            echo " Install deps"
-            echo "====================================="
-            bun install --frozen-lockfile || bun install
+            # 7. 安装依赖
+            bun install --force
 
-            echo "====================================="
-            echo " BUILD FINAL BINARY"
-            echo "====================================="
-            OUTPUT="opencode-centos7-static"
+            # 8. 编译
             bun build ./packages/opencode/src/cli.ts \
               --compile \
               --minify \
               --target=linux-x64 \
-              --outfile "$OUTPUT"
+              --outfile /workspace/opencode-centos7-static
 
-            # 校验文件必须存在
-            ls -lh "$OUTPUT"
-            file "$OUTPUT"
+            # 9. 验证
+            ls -lh /workspace
+            file /workspace/opencode-centos7-static
           '
 
-      - name: Show built binary
+      - name: Show binary
         run: |
           ls -lh opencode-centos7-static
           file opencode-centos7-static

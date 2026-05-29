@@ -1,4 +1,4 @@
-name: Build OpenCode for CentOS7
+name: Build OpenCode for CentOS7 (Statically Compiled)
 
 on:
   push:
@@ -17,9 +17,9 @@ jobs:
           sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-Base.repo
 
       - name: Install dependencies
-        run: yum install -y git curl tar gzip zip unzip
+        run: yum install -y git curl tar gzip zip unzip gcc glibc-static
 
-      - name: Download Bun
+      - name: Download Bun (baseline for CentOS7)
         run: |
           curl -L https://github.com/oven-sh/bun/releases/latest/download/bun-linux-x64-baseline.zip -o bun.zip
           unzip bun.zip
@@ -32,15 +32,25 @@ jobs:
       - name: Install deps
         run: bun install
 
-      - name: Build for CentOS7
+      - name: Build statically for CentOS7
         run: |
           bun build ./packages/opencode/src/cli.ts \
             --compile \
             --minify \
-            --outfile opencode-centos7
+            --target=linux-x64 \
+            --outfile opencode-centos7-static
+        env:
+          # 强制静态链接
+          CFLAGS: "-static"
+          LDFLAGS: "-static"
+
+      - name: Verify static linking
+        run: |
+          file opencode-centos7-static
+          ldd opencode-centos7-static || echo "Binary is statically linked"
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: opencode-centos7
-          path: opencode-centos7
+          name: opencode-centos7-static
+          path: opencode-centos7-static

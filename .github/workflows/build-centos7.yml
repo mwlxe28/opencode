@@ -12,61 +12,71 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build in CentOS7 container with compatibility focus
+      - name: Build in CentOS7 container with full repo fix
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace centos:7 bash -c '
             set -e
-            
-            echo "=== Fixing CentOS7 YUM repo ==="
+
+            echo "=== Fixing CentOS7 YUM repo (VAULT) ==="
             sed -i "s|mirrorlist=|#mirrorlist=|g" /etc/yum.repos.d/CentOS-Base.repo
             sed -i "s|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g" /etc/yum.repos.d/CentOS-Base.repo
-            
-            echo "=== Installing build dependencies with glibc 2.17 compatibility ==="
+            sed -i "s|enabled=1|enabled=1|g" /etc/yum.repos.d/CentOS-Base.repo
+
+            yum clean all
+            yum makecache
+
+            echo "=== Install build dependencies ==="
             yum install -y git curl tar gzip zip unzip gcc gcc-c++ make
-            
-            echo "=== Installing Python 3.9 for node-gyp compatibility ==="
-            yum install -y centos-release-scl
-            yum install -y rh-python39-python rh-python39-python-devel
-            
-            echo "Activating Python 3.9..."
+
+            echo "=== Install SCL repo + FIX SCL REPO ==="
+            yum install -y centos-release-scl centos-release-scl-rh
+
+            # 关键：修复 SCL 仓库
+            sed -i "s|mirrorlist=|#mirrorlist=|g" /etc/yum.repos.d/CentOS-SCLo-scl*.repo
+            sed -i "s|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g" /etc/yum.repos.d/CentOS-SCLo-scl*.repo
+
+            yum clean all
+            yum makecache
+
+            echo "=== Install Python 3.9 ==="
+            yum install -y rh-python39 rh-python39-python-devel
+
+            echo "=== Activate Python 3.9 ==="
             source /opt/rh/rh-python39/enable
             python3 --version
-            
-            echo "=== Installing static libraries ==="
+            pip3 --version
+
+            echo "=== Install static libs for static build ==="
             yum install -y glibc-static libstdc++-static zlib-static
-            
-            echo "=== Downloading Bun baseline (CentOS7 compatible) ==="
+
+            echo "=== Download Bun baseline ==="
             curl -L https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-baseline.zip -o bun.zip
             unzip -q bun.zip
             mv bun-linux-x64-baseline/bun /usr/local/bin/bun
             chmod +x /usr/local/bin/bun
-            echo "Bun version:"
-            /usr/local/bin/bun --version
-            
-            echo "=== Building with prebuilt modules ==="
-            /usr/local/bin/bun install --no-optional || /usr/local/bin/bun install
-            
-            echo "=== Building statically for CentOS7 ==="
-            /usr/local/bin/bun build ./packages/opencode/src/cli.ts \
+            bun --version
+
+            echo "=== Install dependencies ==="
+            bun install --no-optional || bun install
+
+            echo "=== Build static binary for CentOS7 ==="
+            bun build ./packages/opencode/src/cli.ts \
               --compile \
               --minify \
               --target=linux-x64 \
               --outfile opencode-centos7-static
-            
-            echo "=== Binary Information ==="
+
+            echo "=== Binary info ==="
             file opencode-centos7-static
             ls -lh opencode-centos7-static
-            
-            echo "=== Checking for runtime dependencies ==="
-            ldd opencode-centos7-static 2>&1 | head -20 || echo "Binary linking check complete"
+
+            echo "=== Check dependencies (static build) ==="
+            ldd opencode-centos7-static 2>/dev/null || true
           '
 
-      - name: Verify binary compatibility  
+      - name: Verify final binary
         run: |
-          echo "=== File Type ==="
+          echo "--- Binary Type ---"
           file opencode-centos7-static
-          
-          echo "=== Size ==="
+          echo "--- Size ---"
           ls -lh opencode-centos7-static
-          
-          echo "=== Dependencies](#)

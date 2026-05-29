@@ -22,7 +22,7 @@ jobs:
             sed -i "s|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g" /etc/yum.repos.d/CentOS-Base.repo
             
             echo "=== Installing build dependencies ==="
-            yum install -y git curl tar gzip zip unzip gcc gcc-c++ make
+            yum install -y git curl tar gzip zip unzip gcc gcc-c++ make python3 python3-devel
             yum install -y glibc-static libstdc++-static
             
             echo "=== Downloading Bun (baseline for CentOS7) ==="

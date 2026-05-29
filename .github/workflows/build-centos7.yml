@@ -12,98 +12,82 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build in CentOS7 container (vault-only, no mirrorlist)
+      - name: Build in CentOS7 container (FULL FIX)
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace centos:7 bash -c '
-            set -e
+            set -e -x
 
-            echo "=== 1. 替换所有 yum 源为 vault（彻底禁用 mirrorlist） ==="
-            # Base repo
+            echo "====================================="
+            echo " Fix all CentOS 7 YUM repos (Aliyun)"
+            echo "====================================="
             cat > /etc/yum.repos.d/CentOS-Base.repo <<EOF
             [base]
             name=CentOS-7 - Base
-            baseurl=http://vault.centos.org/7.9.2009/os/x86_64/
+            baseurl=https://mirrors.aliyun.com/centos/7.9.2009/os/x86_64/
             gpgcheck=0
             enabled=1
-
             [updates]
             name=CentOS-7 - Updates
-            baseurl=http://vault.centos.org/7.9.2009/updates/x86_64/
+            baseurl=https://mirrors.aliyun.com/centos/7.9.2009/updates/x86_64/
             gpgcheck=0
             enabled=1
-
             [extras]
             name=CentOS-7 - Extras
-            baseurl=http://vault.centos.org/7.9.2009/extras/x86_64/
+            baseurl=https://mirrors.aliyun.com/centos/7.9.2009/extras/x86_64/
             gpgcheck=0
             enabled=1
             EOF
 
-            echo "=== 2. 安装 centos-release-scl（从 vault extras） ==="
-            yum clean all
-            yum makecache fast
-            yum install -y http://vault.centos.org/7.9.2009/extras/x86_64/Packages/centos-release-scl-2-3.el7.centos.noarch.rpm
-            yum install -y http://vault.centos.org/7.9.2009/extras/x86_64/Packages/centos-release-scl-rh-2-3.el7.centos.noarch.rpm
-
-            echo "=== 3. 强制覆盖 SCL 两个 repo，写死 vault 地址 ==="
-            # SCLo sclo
-            cat > /etc/yum.repos.d/CentOS-SCLo-scl.repo <<EOF
-            [centos-sclo-sclo]
-            name=CentOS-7 - SCLo sclo
-            baseurl=http://vault.centos.org/7.9.2009/sclo/x86_64/sclo/
-            gpgcheck=0
-            enabled=1
-            EOF
-
-            # SCLo rh
-            cat > /etc/yum.repos.d/CentOS-SCLo-scl-rh.repo <<EOF
-            [centos-sclo-rh]
-            name=CentOS-7 - SCLo rh
-            baseurl=http://vault.centos.org/7.9.2009/sclo/x86_64/rh/
-            gpgcheck=0
-            enabled=1
-            EOF
-
-            echo "=== 4. 再次清理缓存、重建 ==="
             yum clean all
             yum makecache fast
 
-            echo "=== 5. 安装编译依赖 ==="
-            yum install -y git curl tar gzip zip unzip gcc gcc-c++ make
+            echo "====================================="
+            echo " Install build tools"
+            echo "====================================="
+            yum install -y git curl tar gzip zip unzip gcc gcc-c++ make glibc-static libstdc++-static zlib-static
 
-            echo "=== 6. 安装 Python3.9（rh-python39）==="
-            yum install -y rh-python39 rh-python39-python-devel
-
-            echo "=== 7. 启用 Python3.9 ==="
+            echo "====================================="
+            echo " Install Python 3.9 (SCL)"
+            echo "====================================="
+            yum install -y centos-release-scl
+            sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-SCLo-*.repo
+            sed -i 's|http://mirror.centos.org|https://mirrors.aliyun.com|g' /etc/yum.repos.d/CentOS-SCLo-*.repo
+            yum clean all
+            yum makecache fast
+            yum install -y rh-python39
             source /opt/rh/rh-python39/enable
             python3 --version
 
-            echo "=== 8. 静态编译依赖 ==="
-            yum install -y glibc-static libstdc++-static zlib-static
-
-            echo "=== 9. 下载 Bun ==="
+            echo "====================================="
+            echo " Install Bun"
+            echo "====================================="
             curl -L https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-baseline.zip -o bun.zip
-            unzip -q bun.zip
-            mv bun-linux-x64-baseline/bun /usr/local/bin/bun
+            unzip -o bun.zip
+            mv bun-linux-x64-baseline/bun /usr/local/bin/
             chmod +x /usr/local/bin/bun
             bun --version
 
-            echo "=== 10. 安装依赖 + 编译 ==="
-            bun install --no-optional || bun install
+            echo "====================================="
+            echo " Install deps"
+            echo "====================================="
+            bun install --frozen-lockfile || bun install
 
+            echo "====================================="
+            echo " BUILD FINAL BINARY"
+            echo "====================================="
+            OUTPUT="opencode-centos7-static"
             bun build ./packages/opencode/src/cli.ts \
               --compile \
               --minify \
               --target=linux-x64 \
-              --outfile opencode-centos7-static
+              --outfile "$OUTPUT"
 
-            echo "=== 11. 产物信息 ==="
-            file opencode-centos7-static
-            ls -lh opencode-centos7-static
-            ldd opencode-centos7-static 2>/dev/null || true
+            # 校验文件必须存在
+            ls -lh "$OUTPUT"
+            file "$OUTPUT"
           '
 
-      - name: Verify binary
+      - name: Show built binary
         run: |
-          file opencode-centos7-static
           ls -lh opencode-centos7-static
+          file opencode-centos7-static

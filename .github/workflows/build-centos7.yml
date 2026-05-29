@@ -23,7 +23,7 @@ jobs:
         run: |
           curl -L https://github.com/oven-sh/bun/releases/latest/download/bun-linux-x64-baseline.zip -o bun.zip
           unzip bun.zip
-          mv bun-linux-x64-baseline /usr/local/bin/bun
+          mv bun-linux-x64-baseline/bun /usr/local/bin/bun
           chmod +x /usr/local/bin/bun
           bun --version
 

@@ -1,4 +1,4 @@
-name: Build OpenCode for CentOS 7 (100% Compatible)
+name: Build OpenCode for CentOS 7
 on:
   push:
     branches: [dev]
@@ -10,22 +10,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build inside centos:7 (glibc 2.17)
+      - name: Build inside centos:7 (glibc 2.17 compatible)
         run: |
-          docker run --rm -v $PWD:/workspace -w /workspace centos:7 sh -c "
-            set -e;
-            curl -fsSL https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-baseline.zip -o bun.zip;
-            unzip -q -o bun.zip;
-            mv bun-linux-x64-baseline/bun /usr/local/bin/bun;
-            chmod +x /usr/local/bin/bun;
-            bun install;
-            bun add @octokit/rest;
-            bun build ./packages/opencode/src/cli.ts --compile --minify --outfile opencode-centos7;
-            ls -lh opencode-centos7;
-          "
+          docker run --rm -v $PWD:/workspace -w /workspace centos:7 /bin/bash -c "set -e; yum install -y curl unzip; curl -L https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-baseline.zip -o bun.zip; unzip -o bun.zip; mv bun-linux-x64-baseline/bun /usr/local/bin/; chmod +x /usr/local/bin/bun; bun install; bun build ./packages/opencode/src/cli.ts --compile --outfile opencode-centos7;"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: opencode-centos7
           path: opencode-centos7
+          if-no-files-found: error

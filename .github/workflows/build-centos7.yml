@@ -1,103 +1,25 @@
-name: Build OpenCode for CentOS 7 (Static, Production)
-
+name: Build OpenCode CentOS7
 on:
   push:
-    branches: [ dev ]
+    branches: [dev]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # 消除Node.js 20弃用警告
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Build in CentOS 7 container
+      - name: Install bun & build
         run: |
-          docker run --rm \
-            -v "${PWD}:/workspace" \
-            -w /workspace \
-            centos:7 \
-            bash -c '
-              set -euo pipefail
+          curl -fsSL https://bun.sh/install | bash
+          export PATH="$HOME/.bun/bin:$PATH"
+          bun install
+          bun add @octokit/rest
+          bun build ./packages/opencode/src/cli.ts --compile --target=linux-x64 --outfile opencode-centos7
 
-              # =============================
-              # 彻底清理所有YUM仓库
-              # =============================
-              rm -f /etc/yum.repos.d/*.repo
-
-              # =============================
-              # 写入可用的CentOS 7.9.2009阿里云源
-              # =============================
-              cat > /etc/yum.repos.d/CentOS-Vault.repo <<EOF
-              [base]
-              name=CentOS-7.9.2009 Base
-              baseurl=https://mirrors.aliyun.com/centos-vault/7.9.2009/os/x86_64/
-              gpgcheck=0
-              enabled=1
-
-              [extras]
-              name=CentOS-7.9.2009 Extras
-              baseurl=https://mirrors.aliyun.com/centos-vault/7.9.2009/extras/x86_64/
-              gpgcheck=0
-              enabled=1
-
-              [updates]
-              name=CentOS-7.9.2009 Updates
-              baseurl=https://mirrors.aliyun.com/centos-vault/7.9.2009/updates/x86_64/
-              gpgcheck=0
-              enabled=1
-              EOF
-
-              # =============================
-              # 重建缓存
-              # =============================
-              yum clean all
-              yum makecache
-              yum install -y curl unzip
-
-              # =============================
-              # 安装Bun
-              # =============================
-              curl -fsSL https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-baseline.zip -o bun.zip
-              unzip -q -o bun.zip
-              mv bun-linux-x64-baseline/bun /usr/local/bin/
-              chmod +x /usr/local/bin/bun
-
-              # =============================
-              # 安装依赖
-              # =============================
-              cd /workspace
-              rm -rf node_modules bun.lockb
-              bun install --no-cache
-              bun add @octokit/rest
-
-              # =============================
-              # 编译
-              # =============================
-              bun build ./packages/opencode/src/cli.ts \
-                --compile \
-                --target=linux-x64 \
-                --outfile opencode-centos7
-
-              # =============================
-              # 验证产物存在
-              # =============================
-              ls -lh opencode-centos7
-              file opencode-centos7
-            '
-
-      - name: Verify output exists
-        run: |
-          ls -lh
-          test -f opencode-centos7
-
-      - name: Upload binary artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: opencode-centos7
           path: opencode-centos7
-          if-no-files-found: error

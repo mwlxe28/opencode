@@ -70,4 +70,3 @@ jobs:
           ls -lh opencode-centos7-static
           
           echo "=== Dependencies](#)
-

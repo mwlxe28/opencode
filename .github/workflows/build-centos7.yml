@@ -1,4 +1,4 @@
-name: Build OpenCode CentOS7
+name: Build OpenCode for CentOS 7 (100% Compatible)
 on:
   push:
     branches: [dev]
@@ -10,13 +10,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install bun & build
+      - name: Build inside centos:7 (glibc 2.17)
         run: |
-          curl -fsSL https://bun.sh/install | bash
-          export PATH="$HOME/.bun/bin:$PATH"
-          bun install
-          bun add @octokit/rest
-          bun build ./packages/opencode/src/cli.ts --compile --target=linux-x64 --outfile opencode-centos7
+          docker run --rm -v $PWD:/workspace -w /workspace centos:7 sh -c "
+            set -e;
+            curl -fsSL https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-baseline.zip -o bun.zip;
+            unzip -q -o bun.zip;
+            mv bun-linux-x64-baseline/bun /usr/local/bin/bun;
+            chmod +x /usr/local/bin/bun;
+            bun install;
+            bun add @octokit/rest;
+            bun build ./packages/opencode/src/cli.ts --compile --minify --outfile opencode-centos7;
+            ls -lh opencode-centos7;
+          "
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

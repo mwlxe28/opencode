@@ -15,7 +15,7 @@ jobs:
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace centos:7 bash -c '
             set -e
-            # 1. 简单换源
+            # 1. 换源
             cat > /etc/yum.repos.d/CentOS-Base.repo <<EOF
             [base]
             name=CentOS-7
@@ -26,25 +26,37 @@ jobs:
             yum makecache
             yum install -y curl unzip
 
-            # 2. 安装 bun
+            # 2. 装 bun
             curl -L https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-baseline.zip -o bun.zip
             unzip -o bun.zip
             mv bun-linux-x64-baseline/bun /usr/local/bin/bun
             chmod +x /usr/local/bin/bun
 
-            # 3. 安装依赖（这次把缺的包显式装上）
+            # 3. 手动装缺的包（关键）
             cd /workspace
-            bun install --force --no-cache
+            bun install
             bun add @octokit/rest
+            bun add @octokit/core
+            bun add @octokit/plugin-paginate-rest
+            bun add @octokit/plugin-rest-endpoint-methods
 
             # 4. 编译
             bun build ./packages/opencode/src/cli.ts --compile --target=linux-x64 --outfile app
 
+            # 5. 强制打印，确认有没有生成
             ls -lh
+            pwd
           '
+
+      # 这里先只做 ls，看宿主机有没有拿到文件
+      - name: Check workspace
+        run: |
+          ls -lh
+          pwd
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: opencode-centos7
           path: app
+          if-no-files-found: error  # 找不到文件直接报错，方便定位

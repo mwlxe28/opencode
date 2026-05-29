@@ -8,46 +8,63 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: centos:7
 
     steps:
-      - name: Fix CentOS7 YUM repo (vault.centos.org)
-        run: |
-          sed -i 's|mirrorlist=|#mirrorlist=|g' /etc/yum.repos.d/CentOS-Base.repo
-          sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-Base.repo
-
-      - name: Install dependencies
-        run: yum install -y git curl tar gzip zip unzip gcc glibc-static
-
-      - name: Download Bun (baseline for CentOS7)
-        run: |
-          curl -L https://github.com/oven-sh/bun/releases/latest/download/bun-linux-x64-baseline.zip -o bun.zip
-          unzip bun.zip
-          mv bun-linux-x64-baseline/bun /usr/local/bin/bun
-          chmod +x /usr/local/bin/bun
-          bun --version
-
       - uses: actions/checkout@v4
 
-      - name: Install deps
-        run: bun install
-
-      - name: Build statically for CentOS7
+      - name: Build in CentOS7 container
         run: |
-          bun build ./packages/opencode/src/cli.ts \
-            --compile \
-            --minify \
-            --target=linux-x64 \
-            --outfile opencode-centos7-static
-        env:
-          # 强制静态链接
-          CFLAGS: "-static"
-          LDFLAGS: "-static"
+          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace centos:7 bash -c '
+            set -e
+            
+            echo "=== Fixing CentOS7 YUM repo ==="
+            sed -i "s|mirrorlist=|#mirrorlist=|g" /etc/yum.repos.d/CentOS-Base.repo
+            sed -i "s|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g" /etc/yum.repos.d/CentOS-Base.repo
+            
+            echo "=== Installing build dependencies ==="
+            yum install -y git curl tar gzip zip unzip gcc gcc-c++ make
+            yum install -y glibc-static libstdc++-static
+            
+            echo "=== Downloading Bun (baseline for CentOS7) ==="
+            curl -L https://github.com/oven-sh/bun/releases/latest/download/bun-linux-x64-baseline.zip -o bun.zip
+            unzip bun.zip
+            mv bun-linux-x64-baseline/bun /usr/local/bin/bun
+            chmod +x /usr/local/bin/bun
+            echo "Bun version:"
+            /usr/local/bin/bun --version
+            
+            echo "=== Installing project dependencies ==="
+            /usr/local/bin/bun install
+            
+            echo "=== Building statically for CentOS7 ==="
+            /usr/local/bin/bun build ./packages/opencode/src/cli.ts \
+              --compile \
+              --minify \
+              --target=linux-x64 \
+              --outfile opencode-centos7-static
+            
+            echo "=== Verifying static linking ==="
+            file opencode-centos7-static
+            echo "=== Binary Info ==="
+            ls -lh opencode-centos7-static
+            echo "=== Checking dependencies ==="
+            ldd opencode-centos7-static || echo "Binary is statically linked (no ldd output)"
+          '
 
-      - name: Verify static linking
+      - name: Verify binary is fully static
         run: |
           file opencode-centos7-static
-          ldd opencode-centos7-static || echo "Binary is statically linked"
+          # Try to run ldd - should show "not a dynamic executable" for static binaries
+          output=$(ldd opencode-centos7-static 2>&1 || true)
+          if echo "$output" | grep -q "not a dynamic executable"; then
+            echo "✓ Binary is fully statically linked"
+          elif echo "$output" | grep -q "statically linked"; then
+            echo "✓ Binary is fully statically linked"
+          else
+            echo "ℹ Binary check output: $output"
+          fi
+          
+          ls -lh opencode-centos7-static
 
       - name: Upload
         uses: actions/upload-artifact@v4

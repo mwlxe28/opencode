@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -16,8 +15,7 @@ jobs:
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace centos:7 bash -c '
             set -e
-
-            # 1. 修复YUM源
+            # 1. 简单换源
             cat > /etc/yum.repos.d/CentOS-Base.repo <<EOF
             [base]
             name=CentOS-7
@@ -25,27 +23,28 @@ jobs:
             gpgcheck=0
             enabled=1
             EOF
-
             yum makecache
             yum install -y curl unzip
 
-            # 2. 安装Bun
+            # 2. 安装 bun
             curl -L https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64-baseline.zip -o bun.zip
             unzip -o bun.zip
             mv bun-linux-x64-baseline/bun /usr/local/bin/bun
             chmod +x /usr/local/bin/bun
 
-            # 3. 安装依赖（关键修复）
+            # 3. 安装依赖（这次把缺的包显式装上）
             cd /workspace
             bun install --force --no-cache
+            bun add @octokit/rest
 
-            # 4. 直接编译
+            # 4. 编译
             bun build ./packages/opencode/src/cli.ts --compile --target=linux-x64 --outfile app
 
             ls -lh
           '
 
-      - name: Show result
-        run: |
-          ls -lh
-          file app
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-centos7
+          path: app

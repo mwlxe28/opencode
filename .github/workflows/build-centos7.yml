@@ -1,0 +1,43 @@
+name: Build OpenCode for CentOS7 (glibc 2.17)
+
+# 监听 dev 分支 push → 自动编译
+on:
+  push:
+    branches: [ dev ]
+  workflow_dispatch:  # 允许手动点一下编译
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: centos:7  # 关键：在 CentOS7 里编译，兼容低 glibc
+
+    steps:
+      - name: Install dependencies
+        run: yum install -y git curl tar gzip zip unzip
+
+      - name: Download Bun (baseline for old systems)
+        run: |
+          curl -L https://github.com/oven-sh/bun/releases/latest/download/bun-linux-x64-baseline.zip -o bun.zip
+          unzip bun.zip
+          mv bun-linux-x64-baseline /usr/local/bin/bun
+          chmod +x /usr/local/bin/bun
+          bun --version
+
+      - name: Checkout code (dev 分支)
+        uses: actions/checkout@v4
+
+      - name: Install project deps
+        run: bun install
+
+      - name: Compile static binary for CentOS7
+        run: |
+          bun build ./packages/opencode/src/cli.ts \
+            --compile \
+            --minify \
+            --outfile opencode-centos7
+
+      - name: Upload final binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-centos7
+          path: opencode-centos7
